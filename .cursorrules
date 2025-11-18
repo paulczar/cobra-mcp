@@ -1,0 +1,153 @@
+# Cobra MCP Library - Cursor Rules
+
+## Project Overview
+This is a Go library that enables Cobra-based CLI applications to expose their commands as Model Context Protocol (MCP) tools and provide AI chat functionality. The library executes Cobra commands in-process and captures their output.
+
+## Architecture Principles
+
+### In-Process Execution
+- Commands are executed directly in-process by calling `rootCmd.ExecuteContext()` with the full command path
+- Output is captured via buffers: `rootCmd.SetOut()` and `rootCmd.SetErr()` for Cobra methods, and `os.Stdout` pipe redirection for direct writes
+- Always execute from the root command, not from leaf commands directly
+- Redirect `os.Stderr` to `/dev/null` to prevent protocol interference
+
+### Output Capture
+- **Cobra methods** (`cmd.Println()`, `cmd.Printf()`) are captured via `rootCmd.SetOut()` redirection
+- **Direct writes** (`fmt.Println()`, `os.Stdout.Write()`) are captured via `os.Stdout` pipe redirection
+- Both are merged into a single output buffer before returning
+- Prefer `cmd.Println()` in code examples, but support both methods
+
+### Hierarchical Tool Structure
+- Group commands by action (create, list, describe, delete, etc.)
+- Tools use format: `{prefix}_{action}` (e.g., `advanced_list`, `advanced_create`)
+- Hierarchical tools require a `resource` parameter (enum of available resources)
+- Standalone tools don't need a `resource` parameter
+
+## Code Style
+
+### Go Conventions
+- Follow standard Go formatting (`go fmt`)
+- Use `go vet` for static analysis
+- Package name: `cobra_mcp` (aliased import)
+- Error handling: Return errors, don't panic
+- Use context.Context for cancellation/timeouts
+
+### Naming Conventions
+- Exported functions: PascalCase (e.g., `NewCommandExecutor`)
+- Unexported functions: camelCase (e.g., `findCommand`)
+- Types: PascalCase (e.g., `CommandExecutor`, `ExecuteResult`)
+- Constants: PascalCase or camelCase depending on scope
+
+### File Organization
+- `pkg/` - Core library code
+  - `executor.go` - Command discovery and execution
+  - `tools.go` - Tool registry and MCP tool generation
+  - `server.go` - MCP server wrapper
+  - `chat.go` - Chat client implementation
+  - `system_message.go` - System message generation
+  - `config.go` - Configuration types
+  - `api.go` - Public API exports
+- `cmd/` - Command implementations (serve, chat)
+- `examples/` - Example CLI applications
+- `tests/e2e/` - End-to-end tests
+
+## Testing
+
+### Test Structure
+- Unit tests: Test individual components in isolation
+- E2E tests: Test full command execution with various output methods
+- Test files: `*_test.go` in same package
+- Use `testing` package, consider `testify/assert` for assertions
+
+### Test Coverage
+- Test all output capture methods: `cmd.Println`, `cmd.Printf`, `fmt.Println`, `fmt.Printf`, `os.Stdout.Write`
+- Test edge cases: empty output, mixed output, output ordering
+- Test error handling and exit codes
+- Test stderr isolation
+
+## Documentation
+
+### Code Comments
+- Document exported functions, types, and methods
+- Explain complex logic and non-obvious behavior
+- Include examples for public APIs
+- Document why, not just what
+
+### README, DESIGN, and IMPLEMENTATION
+- Keep README.md focused on usage and quick start
+- Keep DESIGN.md for detailed architecture and implementation
+- Keep IMPLEMENTATION.md for step-by-step integration guide for AI coding agents
+- Update all three when making significant changes:
+  - **README.md**: Update features, configuration examples, API reference, and usage examples
+  - **DESIGN.md**: Update architecture, component details, API reference, and design decisions
+  - **IMPLEMENTATION.md**: Update step-by-step instructions, configuration examples, patterns, and troubleshooting when:
+    - API signatures change
+    - Configuration options are added/removed/changed
+    - New features are added that affect integration steps
+    - Default behaviors change
+    - New patterns or examples are needed
+
+## Dependencies
+
+### Key Dependencies
+- `github.com/spf13/cobra` - Command framework
+- `github.com/modelcontextprotocol/go-sdk/mcp` - MCP protocol
+- `github.com/openai/openai-go` - OpenAI API client
+- `github.com/spf13/pflag` - Flag handling
+
+### Dependency Management
+- Use `go mod tidy` to update dependencies
+- Pin versions in go.mod
+- Keep dependencies minimal
+
+## Common Patterns
+
+### Command Execution Flow
+1. Find command using `rootCmd.Find()`
+2. Redirect output to buffers (`rootCmd.SetOut()`, `rootCmd.SetErr()`)
+3. Redirect `os.Stdout` via pipe for direct writes
+4. Redirect `os.Stderr` to `/dev/null`
+5. Set flags programmatically on target command
+6. Execute from root: `rootCmd.SetArgs([...])` then `rootCmd.ExecuteContext(ctx)`
+7. Merge captured outputs
+8. Restore original stdout/stderr
+
+### Error Handling
+- Return errors, don't log and continue silently
+- Provide helpful error messages
+- Use `isError: true` in MCP responses for command failures
+- Capture exit codes from command execution
+
+## When Making Changes
+
+### Before Committing
+- Run `make fmt` to format code
+- Run `make vet` to check for issues
+- Run `make test` to ensure tests pass
+- Run `make test-e2e` to verify output capture still works
+- Update documentation if API changes:
+  - **README.md**: Features, configuration, API reference, usage examples
+  - **DESIGN.md**: Architecture, components, API details, design decisions
+  - **IMPLEMENTATION.md**: Integration steps, configuration examples, patterns, troubleshooting
+
+### Version Management
+- **Version synchronization**: Keep `pkg/version.go` and git tags in sync
+- When releasing a new version:
+  1. Update `pkg/version.go` with the new version constant (e.g., `const Version = "1.0.1"`)
+  2. Update `CHANGELOG.md` with a new `[X.Y.Z] - YYYY-MM-DD` section
+  3. Commit changes with message: `Release vX.Y.Z`
+  4. Create matching git tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+- Follow semantic versioning (https://semver.org/):
+  - **MAJOR** (X.0.0): Breaking changes
+  - **MINOR** (x.Y.0): New features, backward compatible
+  - **PATCH** (x.y.Z): Bug fixes, backward compatible
+
+### Breaking Changes
+- Update version numbers (both `pkg/version.go` and git tag)
+- Update CHANGELOG with new version section
+- Update examples if API changes
+- Consider backward compatibility
+
+## Module Path
+- Module: `github.com/paulczar/cobra-mcp`
+- Import path: `github.com/paulczar/cobra-mcp/pkg`

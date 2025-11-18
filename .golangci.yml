@@ -1,0 +1,52 @@
+version: 2
+
+run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - vendor
+    - .history
+    - .git
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+
+linters-settings:
+  errcheck:
+    check-blank: false
+  govet:
+    check-shadowing: true
+  staticcheck:
+    checks: ["all"]
+  unused:
+    check-exported: false
+
+issues:
+  exclude-rules:
+    # Allow unchecked errors in examples (they're demonstration code)
+    - path: examples/
+      linters:
+        - errcheck
+    # Allow unchecked errors in test files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - staticcheck
+    # Allow unchecked errors in defer cleanup functions
+    - text: "Error return value of .*Close\\(\\) is not checked"
+      linters:
+        - errcheck
+    # Allow unchecked os.Setenv in defer (cleanup)
+    - text: "Error return value of os\\.Setenv"
+      linters:
+        - errcheck
+    # Allow unchecked io.Copy in goroutines (background capture)
+    - text: "Error return value of io\\.Copy"
+      linters:
+        - errcheck
