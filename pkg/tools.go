@@ -281,7 +281,7 @@ func (tr *ToolRegistry) createHierarchicalTool(action string, resources []string
 	// Create flags property with properties and additionalProperties
 	flagsProperty := map[string]interface{}{
 		"type":                 "object",
-		"description":          "REQUIRED for most commands: Command flags as key-value pairs (flag names without '--' prefix)",
+		"description":          "Optional: Command flags as key-value pairs (flag names without '--' prefix). Provide an empty object {} if no flags are needed.",
 		"additionalProperties": true,
 	}
 

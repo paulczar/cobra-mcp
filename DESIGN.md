@@ -213,7 +213,7 @@ Each hierarchical tool has this schema:
     },
     "flags": {
       "type": "object",
-      "description": "REQUIRED for most commands: Command flags as key-value pairs",
+      "description": "Optional: Command flags as key-value pairs (flag names without '--' prefix). Provide an empty object {} if no flags are needed.",
       "properties": {
         "flagName": {
           "type": "string",
