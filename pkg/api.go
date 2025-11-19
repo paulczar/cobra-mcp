@@ -62,17 +62,19 @@ func NewChatCommand(rootCmd *cobra.Command, config *ChatConfig, serverConfig *Se
 				chatConfig = &ChatConfig{}
 			}
 
-			// Override with flags
+			// Override with flags (only if flags were explicitly set)
 			if apiKey != "" {
 				chatConfig.APIKey = apiKey
 			}
 			if apiURL != "" {
 				chatConfig.APIURL = apiURL
 			}
-			if model != "" {
+			if cmd.Flags().Changed("model") {
 				chatConfig.Model = model
 			}
-			chatConfig.Debug = debug
+			if cmd.Flags().Changed("debug") {
+				chatConfig.Debug = debug
+			}
 			if systemMessageFile != "" {
 				chatConfig.SystemMessageFile = systemMessageFile
 			}

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Chat debug mode now displays the model being used for API calls
+
+### Fixed
+- Chat command now respects ChatConfig.Model when --model flag is not explicitly provided
+- Previously, the default value of the --model flag ("gpt-4") would override ChatConfig.Model even when the flag wasn't set
+
 ## [1.0.0] - 2025-11-19
 
 ### Added

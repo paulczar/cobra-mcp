@@ -93,6 +93,9 @@ func (cc *ChatClient) RunChatLoop() error {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("Chat client started. Type 'exit' or 'quit' to exit.")
+	if cc.debug {
+		fmt.Printf("Debug: Using model: %s\n", cc.model)
+	}
 	fmt.Println()
 
 	for {
@@ -141,6 +144,10 @@ func (cc *ChatClient) ProcessMessage(userInput string) error {
 
 		if len(tools) > 0 {
 			req.Tools = tools
+		}
+
+		if cc.debug {
+			fmt.Printf("Debug: Calling API with model: %s\n", cc.model)
 		}
 
 		resp, err := cc.client.Chat.Completions.New(ctx, req)
