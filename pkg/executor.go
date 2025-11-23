@@ -168,6 +168,62 @@ func (e *CommandExecutor) FindCommand(path []string) (*cobra.Command, []string, 
 	return cmd, args, nil
 }
 
+// FindCommandsUsingRun finds all commands that use Run: instead of RunE:
+// These commands may call os.Exit() which will terminate the MCP/chat process
+func (e *CommandExecutor) FindCommandsUsingRun() []CommandRunWarning {
+	warnings := []CommandRunWarning{}
+	e.traverseForRunWarnings(e.rootCmd, []string{}, &warnings)
+	return warnings
+}
+
+// CommandRunWarning represents a warning about a command using Run: instead of RunE:
+type CommandRunWarning struct {
+	Path        []string // Command path: ["list", "clusters"]
+	CommandName string   // Full command name for display
+}
+
+// traverseForRunWarnings recursively finds commands using Run: instead of RunE:
+func (e *CommandExecutor) traverseForRunWarnings(cmd *cobra.Command, path []string, warnings *[]CommandRunWarning) {
+	// Skip hidden commands and root
+	if cmd.Hidden {
+		// Still traverse children
+		for _, subCmd := range cmd.Commands() {
+			e.traverseForRunWarnings(subCmd, path, warnings)
+		}
+		return
+	}
+
+	// If this is the root command, just traverse children
+	if cmd == e.rootCmd {
+		for _, subCmd := range cmd.Commands() {
+			e.traverseForRunWarnings(subCmd, []string{}, warnings)
+		}
+		return
+	}
+
+	// Check if command uses Run: instead of RunE:
+	// Commands using Run: may call os.Exit() which terminates the MCP/chat process
+	// Skip built-in Cobra commands like "help" which users can't control
+	if cmd.Run != nil && cmd.RunE == nil {
+		// Skip built-in help command (Cobra adds this automatically)
+		if cmd.Name() == "help" && len(path) == 0 {
+			// This is the built-in help command at root level - skip it
+		} else {
+			currentPath := append(path, cmd.Name())
+			*warnings = append(*warnings, CommandRunWarning{
+				Path:        currentPath,
+				CommandName: strings.Join(currentPath, " "),
+			})
+		}
+	}
+
+	// Traverse subcommands
+	currentPath := append(path, cmd.Name())
+	for _, subCmd := range cmd.Commands() {
+		e.traverseForRunWarnings(subCmd, currentPath, warnings)
+	}
+}
+
 // Execute executes a command with the given path and flags directly in-process
 func (e *CommandExecutor) Execute(commandPath []string, flags map[string]interface{}) (*ExecuteResult, error) {
 	cmd, args, err := e.FindCommand(commandPath)

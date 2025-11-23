@@ -79,6 +79,8 @@ This document describes the design for a reusable, pluggable library that enable
 
 **Purpose**: Discover and execute Cobra commands directly in-process by calling their Run functions.
 
+**⚠️ Important Limitation**: Commands execute **in-process**. If a command calls `os.Exit()`, it will **terminate the entire MCP server or chat client process**. Commands should use `RunE:` (return errors) instead of `Run:` with `os.Exit()` calls.
+
 **Key Responsibilities**:
 - Traverse Cobra command tree to discover all commands
 - Extract flag information (name, type, description, required)
@@ -142,6 +144,12 @@ func (e *CommandExecutor) FindCommand(path []string) (*cobra.Command, []string, 
 - **Direct writes** (`fmt.Println()`, `os.Stdout.Write()`, etc.): Captured via `os.Stdout` pipe redirection
 - Both are merged into a single output buffer before returning results
 - **Best Practice**: Commands should use `cmd.Println()` as it respects output redirection and follows Cobra conventions, but direct writes are supported for compatibility
+
+**⚠️ Critical: Avoid `os.Exit()` in Commands**:
+- Commands execute **in-process** - `os.Exit()` terminates the entire MCP/chat process
+- Use `RunE:` instead of `Run:` to return errors instead of calling `os.Exit()`
+- The executor cannot capture output or continue the session after `os.Exit()` is called
+- This is a fundamental limitation of in-process execution - `os.Exit()` cannot be intercepted
 
 ### 3.2 ToolRegistry
 

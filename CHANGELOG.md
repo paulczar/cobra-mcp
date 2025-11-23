@@ -7,12 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-01-XX
+
 ### Added
-- Chat debug mode now displays the model being used for API calls
+- Detection and warnings for commands using `Run:` instead of `RunE:`
+- Automatic warnings when MCP server or chat client starts if commands may call `os.Exit()`
+- E2E tests for `Run:` detection and warning system
+- Excludes built-in Cobra `help` command from warnings (users can't control it)
 
 ### Fixed
+- Tool schema description now correctly marks `flags` parameter as optional instead of "REQUIRED for most commands"
+- This prevents AI models from being confused when flags are not provided
+- Chat debug mode now displays the model being used for API calls
 - Chat command now respects ChatConfig.Model when --model flag is not explicitly provided
 - Previously, the default value of the --model flag ("gpt-4") would override ChatConfig.Model even when the flag wasn't set
+
+### Changed
+- Updated examples to use `RunE:` instead of `Run:` to follow best practices
+- Documentation updated with warnings about avoiding `os.Exit()` in commands
 
 ## [1.0.0] - 2025-11-19
 

@@ -185,6 +185,42 @@ func NewChatClient(server *Server, config *ChatConfig) (*ChatClient, error)
 
 ## Best Practices
 
+### Error Handling - Avoid `os.Exit()`
+
+**⚠️ CRITICAL**: Commands executed through MCP/chat run **in-process**. If your commands call `os.Exit()`, it will **terminate the entire MCP server or chat client process**, preventing further interaction.
+
+**Use `RunE:` instead of `Run:`** to return errors instead of calling `os.Exit()`:
+
+```go
+// ❌ BAD - os.Exit() terminates the MCP/chat process
+var listCmd = &cobra.Command{
+    Use: "list",
+    Run: func(cmd *cobra.Command, args []string) {
+        if err := doSomething(); err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)  // ❌ This kills the MCP server!
+        }
+    },
+}
+
+// ✅ GOOD - Returns error instead
+var listCmd = &cobra.Command{
+    Use: "list",
+    RunE: func(cmd *cobra.Command, args []string) error {
+        if err := doSomething(); err != nil {
+            return fmt.Errorf("error: %w", err)  // ✅ Error is handled gracefully
+        }
+        return nil
+    },
+}
+```
+
+**Why this matters:**
+- Commands execute in the same process as the MCP server/chat client
+- `os.Exit()` immediately terminates the entire process (no cleanup, no return)
+- The executor cannot capture output or continue the session after `os.Exit()`
+- Using `RunE:` allows proper error handling and the session continues
+
 ### Command Output
 
 When writing command output in your Cobra commands, **prefer using `cmd.Println()` or `cmd.Printf()`** instead of `fmt.Println()` or direct writes to `os.Stdout`:

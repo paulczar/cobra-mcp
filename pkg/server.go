@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
@@ -22,6 +23,11 @@ type Server struct {
 // NewServer creates a new MCP server
 func NewServer(rootCmd *cobra.Command, config *ServerConfig) *Server {
 	config = normalizeServerConfig(rootCmd, config)
+
+	// Check for commands using Run: instead of RunE: and warn
+	// Note: This warning may be suppressed if warnAboutCommandsUsingRun was already called
+	// (e.g., from chat command). We use a simple approach - warn once per process.
+	warnAboutCommandsUsingRun(rootCmd, "MCP server")
 
 	// Create registries
 	toolRegistry := NewToolRegistry(rootCmd, config)
@@ -222,4 +228,32 @@ func ServeHTTP(rootCmd *cobra.Command, port int, config *ServerConfig) error {
 	// Start HTTP server
 	addr := fmt.Sprintf(":%d", port)
 	return http.ListenAndServe(addr, handler)
+}
+
+// warnAboutCommandsUsingRun checks for commands using Run: instead of RunE: and prints warnings
+// Commands using Run: may call os.Exit() which will terminate the MCP/chat process
+// Uses a simple check to avoid duplicate warnings (warns once per process)
+var warnAboutCommandsUsingRunCalled bool
+
+func warnAboutCommandsUsingRun(rootCmd *cobra.Command, context string) {
+	// Avoid duplicate warnings if called multiple times (e.g., from chat which creates a server)
+	if warnAboutCommandsUsingRunCalled {
+		return
+	}
+	warnAboutCommandsUsingRunCalled = true
+
+	executor := NewCommandExecutor(rootCmd)
+	warnings := executor.FindCommandsUsingRun()
+
+	if len(warnings) > 0 {
+		// Print to stderr to avoid interfering with MCP protocol (which uses stdout)
+		fmt.Fprintf(os.Stderr, "\n⚠️  WARNING: %d command(s) use Run: instead of RunE:\n", len(warnings))
+		fmt.Fprintf(os.Stderr, "   Commands using Run: may call os.Exit() which will terminate the %s process.\n", context)
+		fmt.Fprintf(os.Stderr, "   Consider migrating these commands to use RunE: and return errors instead.\n\n")
+		fmt.Fprintf(os.Stderr, "   Affected commands:\n")
+		for _, warning := range warnings {
+			fmt.Fprintf(os.Stderr, "     - %s\n", warning.CommandName)
+		}
+		fmt.Fprintf(os.Stderr, "\n   See documentation for details: https://github.com/paulczar/cobra-mcp#best-practices\n\n")
+	}
 }

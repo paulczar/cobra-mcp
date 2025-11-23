@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -448,5 +449,315 @@ func TestDangerousCommandsInSystemMessage(t *testing.T) {
 
 	if !strings.Contains(systemMessage, "DANGEROUS COMMAND DETECTION") {
 		t.Error("Expected system message to contain 'DANGEROUS COMMAND DETECTION' section")
+	}
+}
+
+// getTestCLIWithRunCommands creates a test CLI with commands using Run: (some with os.Exit)
+func getTestCLIWithRunCommands() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "testcli",
+		Short: "Test CLI for Run: detection",
+	}
+
+	// Command using Run: (may call os.Exit)
+	runCmd := &cobra.Command{
+		Use:   "run-command",
+		Short: "Command using Run:",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Println("Using Run:")
+			os.Exit(0)
+		},
+	}
+
+	// Command using RunE: (good)
+	runECmd := &cobra.Command{
+		Use:   "rune-command",
+		Short: "Command using RunE:",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.Println("Using RunE:")
+			return nil
+		},
+	}
+
+	// Nested command using Run:
+	nestedCmd := &cobra.Command{
+		Use:   "nested",
+		Short: "Nested command group",
+	}
+	nestedRunCmd := &cobra.Command{
+		Use:   "run-subcommand",
+		Short: "Nested command using Run:",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Println("Nested Run:")
+			os.Exit(1)
+		},
+	}
+	nestedCmd.AddCommand(nestedRunCmd)
+
+	// Another nested command using RunE:
+	nestedRunECmd := &cobra.Command{
+		Use:   "rune-subcommand",
+		Short: "Nested command using RunE:",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cmd.Println("Nested RunE:")
+			return nil
+		},
+	}
+	nestedCmd.AddCommand(nestedRunECmd)
+
+	rootCmd.AddCommand(runCmd)
+	rootCmd.AddCommand(runECmd)
+	rootCmd.AddCommand(nestedCmd)
+
+	return rootCmd
+}
+
+func TestFindCommandsUsingRun(t *testing.T) {
+	rootCmd := getTestCLIWithRunCommands()
+	executor := cobra_mcp.NewCommandExecutor(rootCmd)
+
+	warnings := executor.FindCommandsUsingRun()
+
+	// Should find 2 commands using Run: (run-command and nested run-subcommand)
+	expectedCount := 2
+	if len(warnings) != expectedCount {
+		t.Errorf("Expected %d warnings, got %d", expectedCount, len(warnings))
+	}
+
+	// Verify specific commands are detected
+	foundRunCommand := false
+	foundNestedRun := false
+
+	for _, warning := range warnings {
+		commandName := warning.CommandName
+		if commandName == "run-command" {
+			foundRunCommand = true
+			if len(warning.Path) != 1 || warning.Path[0] != "run-command" {
+				t.Errorf("Expected path ['run-command'], got %v", warning.Path)
+			}
+		}
+		if commandName == "nested run-subcommand" {
+			foundNestedRun = true
+			expectedPath := []string{"nested", "run-subcommand"}
+			if len(warning.Path) != 2 || warning.Path[0] != "nested" || warning.Path[1] != "run-subcommand" {
+				t.Errorf("Expected path %v, got %v", expectedPath, warning.Path)
+			}
+		}
+	}
+
+	if !foundRunCommand {
+		t.Error("Expected to find 'run-command' in warnings")
+	}
+	if !foundNestedRun {
+		t.Error("Expected to find 'nested run-subcommand' in warnings")
+	}
+}
+
+func TestFindCommandsUsingRunExcludesRunE(t *testing.T) {
+	rootCmd := getTestCLIWithRunCommands()
+	executor := cobra_mcp.NewCommandExecutor(rootCmd)
+
+	warnings := executor.FindCommandsUsingRun()
+
+	// Verify that commands using RunE: are NOT included
+	for _, warning := range warnings {
+		if warning.CommandName == "rune-command" {
+			t.Error("Command using RunE: should not be in warnings")
+		}
+		if warning.CommandName == "nested rune-subcommand" {
+			t.Error("Nested command using RunE: should not be in warnings")
+		}
+	}
+}
+
+func TestWarnAboutCommandsUsingRunOutput(t *testing.T) {
+	rootCmd := getTestCLIWithRunCommands()
+
+	// Capture stderr
+	originalStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stderr = w
+
+	// Create server (this should trigger warnings)
+	config := &cobra_mcp.ServerConfig{
+		ToolPrefix: "testcli",
+	}
+	_ = cobra_mcp.NewServer(rootCmd, config)
+
+	// Close write end and read output
+	w.Close()
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	os.Stderr = originalStderr
+
+	output := buf.String()
+
+	// Verify warning is printed
+	if !strings.Contains(output, "WARNING") {
+		t.Error("Expected warning message in stderr output")
+	}
+
+	if !strings.Contains(output, "Run: instead of RunE:") {
+		t.Error("Expected warning about Run: vs RunE:")
+	}
+
+	// Verify affected commands are listed
+	if !strings.Contains(output, "run-command") {
+		t.Error("Expected 'run-command' to be listed in warnings")
+	}
+
+	if !strings.Contains(output, "nested run-subcommand") {
+		t.Error("Expected 'nested run-subcommand' to be listed in warnings")
+	}
+
+	// Verify commands using RunE: are NOT listed
+	if strings.Contains(output, "rune-command") {
+		t.Error("Command using RunE: should not be listed in warnings")
+	}
+
+	// Verify warning count is correct
+	if !strings.Contains(output, "2 command(s)") {
+		t.Errorf("Expected warning to mention '2 command(s)', got: %s", output)
+	}
+}
+
+func TestWarnAboutCommandsUsingRunWithNoWarnings(t *testing.T) {
+	// Create a CLI with only RunE: commands (no warnings expected)
+	rootCmd := &cobra.Command{
+		Use:   "testcli",
+		Short: "Test CLI with only RunE:",
+	}
+
+	runECmd := &cobra.Command{
+		Use:   "rune-command",
+		Short: "Command using RunE:",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+	rootCmd.AddCommand(runECmd)
+
+	// Capture stderr
+	originalStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	os.Stderr = w
+
+	// Create server (should not trigger warnings)
+	config := &cobra_mcp.ServerConfig{
+		ToolPrefix: "testcli",
+	}
+	_ = cobra_mcp.NewServer(rootCmd, config)
+
+	// Close write end and read output
+	w.Close()
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	if err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
+	os.Stderr = originalStderr
+
+	output := buf.String()
+
+	// Verify no warning is printed
+	if strings.Contains(output, "WARNING") {
+		t.Errorf("Expected no warning for CLI with only RunE: commands, got: %s", output)
+	}
+}
+
+func TestWarnAboutCommandsUsingRunExcludesHiddenCommands(t *testing.T) {
+	rootCmd := &cobra.Command{
+		Use:   "testcli",
+		Short: "Test CLI",
+	}
+
+	// Hidden command using Run: (should be excluded)
+	hiddenCmd := &cobra.Command{
+		Use:    "hidden-run",
+		Short:  "Hidden command using Run:",
+		Hidden: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			os.Exit(1)
+		},
+	}
+
+	// Visible command using Run: (should be included)
+	visibleCmd := &cobra.Command{
+		Use:   "visible-run",
+		Short: "Visible command using Run:",
+		Run: func(cmd *cobra.Command, args []string) {
+			os.Exit(1)
+		},
+	}
+
+	rootCmd.AddCommand(hiddenCmd)
+	rootCmd.AddCommand(visibleCmd)
+
+	executor := cobra_mcp.NewCommandExecutor(rootCmd)
+	warnings := executor.FindCommandsUsingRun()
+
+	// Should only find the visible command
+	if len(warnings) != 1 {
+		t.Errorf("Expected 1 warning (hidden command should be excluded), got %d", len(warnings))
+	}
+
+	if warnings[0].CommandName != "visible-run" {
+		t.Errorf("Expected 'visible-run' in warnings, got %s", warnings[0].CommandName)
+	}
+}
+
+func TestWarnAboutCommandsUsingRunExcludesBuiltinHelp(t *testing.T) {
+	rootCmd := &cobra.Command{
+		Use:   "testcli",
+		Short: "Test CLI",
+	}
+
+	// User command using Run: (should be included)
+	userCmd := &cobra.Command{
+		Use:   "user-command",
+		Short: "User command using Run:",
+		Run: func(cmd *cobra.Command, args []string) {
+			os.Exit(1)
+		},
+	}
+
+	rootCmd.AddCommand(userCmd)
+	// Note: Cobra automatically adds a "help" command, but we can't easily test that
+	// Instead, we'll manually add a help command at root level to simulate it
+	helpCmd := &cobra.Command{
+		Use:   "help",
+		Short: "Help about any command",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Built-in help command behavior
+		},
+	}
+	rootCmd.AddCommand(helpCmd)
+
+	executor := cobra_mcp.NewCommandExecutor(rootCmd)
+	warnings := executor.FindCommandsUsingRun()
+
+	// Should only find the user command, not the help command
+	if len(warnings) != 1 {
+		t.Errorf("Expected 1 warning (help command should be excluded), got %d", len(warnings))
+	}
+
+	if warnings[0].CommandName != "user-command" {
+		t.Errorf("Expected 'user-command' in warnings, got %s", warnings[0].CommandName)
+	}
+
+	// Verify help command is NOT in warnings
+	for _, warning := range warnings {
+		if warning.CommandName == "help" {
+			t.Error("Built-in 'help' command should not be in warnings")
+		}
 	}
 }

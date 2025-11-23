@@ -19,15 +19,17 @@ func main() {
 	createCmd.AddCommand(&cobra.Command{
 		Use:   "cluster",
 		Short: "Create a cluster",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println("Creating cluster...")
+			return nil
 		},
 	})
 	createCmd.AddCommand(&cobra.Command{
 		Use:   "machinepool",
 		Short: "Create a machine pool",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println("Creating machine pool...")
+			return nil
 		},
 	})
 
@@ -38,8 +40,9 @@ func main() {
 	listCmd.AddCommand(&cobra.Command{
 		Use:   "clusters",
 		Short: "List clusters",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println(`[{"id": "1", "name": "cluster1"}]`)
+			return nil
 		},
 	})
 
@@ -47,8 +50,9 @@ func main() {
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print the version number",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println("example v1.0.0")
+			return nil
 		},
 	}
 

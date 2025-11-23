@@ -98,7 +98,42 @@ chatConfig := &cobra_mcp.ChatConfig{
 rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, chatConfig))
 ```
 
-## Step 7: Verify Command Output Methods
+## Step 7: Use `RunE:` Instead of `Run:` with `os.Exit()`
+
+**⚠️ CRITICAL**: Commands executed through MCP/chat run **in-process**. If your commands call `os.Exit()`, it will **terminate the entire MCP server or chat client process**.
+
+**Always use `RunE:` to return errors instead of calling `os.Exit()`:**
+
+```go
+// ❌ BAD - os.Exit() terminates the MCP/chat process
+var listCmd = &cobra.Command{
+    Use: "list",
+    Run: func(cmd *cobra.Command, args []string) {
+        if err := listClusters(); err != nil {
+            fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+            os.Exit(1)  // ❌ This kills the MCP server!
+        }
+    },
+}
+
+// ✅ GOOD - Returns error instead
+var listCmd = &cobra.Command{
+    Use: "list",
+    RunE: func(cmd *cobra.Command, args []string) error {
+        if err := listClusters(); err != nil {
+            return fmt.Errorf("failed to list clusters: %w", err)  // ✅ Error handled gracefully
+        }
+        return nil
+    },
+}
+```
+
+**Why this matters:**
+- `os.Exit()` immediately terminates the entire process (no cleanup, no return)
+- The executor cannot capture output or continue the session after `os.Exit()`
+- Using `RunE:` allows proper error handling and the session continues
+
+## Step 8: Verify Command Output Methods
 
 Ensure your commands use appropriate output methods:
 
@@ -116,7 +151,7 @@ os.Stdout.Write([]byte("output"))
 
 The library captures both, but `cmd.Println()` is preferred for proper output redirection.
 
-## Step 8: Test the Integration
+## Step 9: Test the Integration
 
 1. **Test MCP Server:**
    ```bash
@@ -134,7 +169,7 @@ The library captures both, but `cmd.Println()` is preferred for proper output re
    yourcli chat system-message
    ```
 
-## Step 9: Customize (Optional)
+## Step 10: Customize (Optional)
 
 ### Custom System Message
 
@@ -162,7 +197,7 @@ serverConfig := &cobra_mcp.ServerConfig{
 
 **Note:** If you specify `CustomActions`, only those actions will be recognized (whitelist mode). All other commands will be ignored. This is useful if you want to exclude certain commands from being exposed as MCP tools.
 
-## Step 10: Verify Tool Generation
+## Step 11: Verify Tool Generation
 
 After integration, verify tools are generated correctly:
 
@@ -219,10 +254,14 @@ rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
    - Check that your commands follow the action/resource pattern (e.g., `create cluster`, `list nodes`)
    - If you specified `CustomActions`, make sure your action is in the whitelist (auto-detection is disabled when `CustomActions` is set)
    - Standalone commands (like `version`, `help`) are auto-detected if they have no subcommands
-2. **Output not captured**: Ensure commands use `cmd.Println()` or `fmt.Println()` (both are supported)
-3. **MCP server hangs**: Verify commands don't write directly to `os.Stderr` (use `cmd.PrintErr()` instead)
-4. **Chat not working**: Verify `OPENAI_API_KEY` is set or passed via `--api-key` flag
-5. **Custom actions not working**: If you specified `CustomActions`, remember it acts as a whitelist - only actions in the list will be recognized. Auto-detection is disabled when `CustomActions` is set.
+2. **MCP server or chat client terminates unexpectedly**:
+   - **⚠️ CRITICAL**: Commands using `Run:` with `os.Exit()` will terminate the entire MCP/chat process
+   - **Solution**: Use `RunE:` instead of `Run:` and return errors instead of calling `os.Exit()`
+   - See Step 7 above for examples
+3. **Output not captured**: Ensure commands use `cmd.Println()` or `fmt.Println()` (both are supported)
+4. **MCP server hangs**: Verify commands don't write directly to `os.Stderr` (use `cmd.PrintErr()` instead)
+5. **Chat not working**: Verify `OPENAI_API_KEY` is set or passed via `--api-key` flag
+6. **Custom actions not working**: If you specified `CustomActions`, remember it acts as a whitelist - only actions in the list will be recognized. Auto-detection is disabled when `CustomActions` is set.
 
 ## Complete Example
 

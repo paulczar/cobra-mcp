@@ -54,6 +54,8 @@ func NewChatCommand(rootCmd *cobra.Command, config *ChatConfig, serverConfig *Se
 					ToolPrefix: rootCmd.Name(),
 				}
 			}
+			// Warn about commands using Run: with chat context (NewServer will skip duplicate warning)
+			warnAboutCommandsUsingRun(rootCmd, "chat client")
 			server := NewServer(rootCmd, serverConfig)
 
 			// Create chat config

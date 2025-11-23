@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 
 	cobra_mcp "github.com/paulczar/cobra-mcp/pkg"
 	"github.com/spf13/cobra"
@@ -23,7 +24,7 @@ func main() {
 		Use:   "cluster",
 		Short: "Create a cluster",
 		Long:  "Create a new cluster with the specified name, region, and size.",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := cmd.Flags().GetString("name")
 			region, _ := cmd.Flags().GetString("region")
 			size, _ := cmd.Flags().GetString("size")
@@ -31,8 +32,7 @@ func main() {
 			// Validate size
 			validSizes := map[string]bool{"Small": true, "Medium": true, "Large": true}
 			if size != "" && !validSizes[size] {
-				cmd.PrintErr("Error: size must be one of: Small, Medium, Large\n")
-				return
+				return fmt.Errorf("size must be one of: Small, Medium, Large")
 			}
 
 			// Create response JSON
@@ -45,6 +45,7 @@ func main() {
 			}
 			jsonBytes, _ := json.Marshal(response)
 			cmd.Println(string(jsonBytes))
+			return nil
 		},
 	}
 	createClusterCmd.Flags().String("name", "", "The unique name of the cluster. The name can be used as the identifier of the cluster. The maximum length is 54 characters. Once set, the cluster name cannot be changed")
@@ -62,8 +63,9 @@ func main() {
 	deleteCmd.AddCommand(&cobra.Command{
 		Use:   "cluster",
 		Short: "Delete a cluster",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println(`{"status": "deleted"}`)
+			return nil
 		},
 	})
 
@@ -74,8 +76,9 @@ func main() {
 	describeCmd.AddCommand(&cobra.Command{
 		Use:   "cluster",
 		Short: "Describe a cluster",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println(`{"id": "cluster-123", "name": "my-cluster", "status": "ready"}`)
+			return nil
 		},
 	})
 
@@ -86,8 +89,9 @@ func main() {
 	listCmd.AddCommand(&cobra.Command{
 		Use:   "clusters",
 		Short: "List clusters",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println(`[{"id": "cluster-123", "name": "my-cluster", "status": "ready"}, {"id": "cluster-456", "name": "another-cluster", "status": "creating"}]`)
+			return nil
 		},
 	})
 
@@ -95,8 +99,9 @@ func main() {
 	versionCmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print the version number",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.Println("advanced v2.0.0")
+			return nil
 		},
 	}
 
@@ -122,6 +127,7 @@ func main() {
 	rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
 		Model: "gpt-5-mini",
 		Debug: false,
+		// SystemMessage: "you are a poo poo head",
 	}, serverConfig))
 
 	rootCmd.Execute()
