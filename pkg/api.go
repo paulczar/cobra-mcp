@@ -1,13 +1,70 @@
 package cobra_mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 )
 
-// NewMCPServeCommand creates a new MCP serve command
+// NewMCPCommand creates a new MCP command with subcommands
+func NewMCPCommand(rootCmd *cobra.Command, config *ServerConfig) *cobra.Command {
+	mcpCmd := &cobra.Command{
+		Use:   "mcp",
+		Short: "MCP server commands",
+		Long:  "Commands for managing the Model Context Protocol server",
+	}
+
+	// Add start subcommand
+	startCmd := &cobra.Command{
+		Use:   "start",
+		Short: "Start MCP server over stdin",
+		Long:  "Start the Model Context Protocol server over stdin/stdout",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ServeStdio(rootCmd, config)
+		},
+	}
+
+	// Add stream subcommand
+	var port int
+	streamCmd := &cobra.Command{
+		Use:   "stream",
+		Short: "Start MCP server over HTTP",
+		Long:  "Start the Model Context Protocol server over HTTP",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return ServeHTTP(rootCmd, port, config)
+		},
+	}
+	streamCmd.Flags().IntVar(&port, "port", 8080, "Port for HTTP transport")
+
+	// Add tools subcommand
+	toolsCmd := &cobra.Command{
+		Use:   "tools",
+		Short: "Export available MCP tools as JSON",
+		Long:  "Export all available MCP tools as JSON",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			server := NewServer(rootCmd, config)
+			tools := server.ToolRegistry().GetHierarchicalTools()
+
+			jsonBytes, err := json.MarshalIndent(tools, "", "  ")
+			if err != nil {
+				return fmt.Errorf("error marshaling tools: %w", err)
+			}
+
+			cmd.Println(string(jsonBytes))
+			return nil
+		},
+	}
+
+	mcpCmd.AddCommand(startCmd)
+	mcpCmd.AddCommand(streamCmd)
+	mcpCmd.AddCommand(toolsCmd)
+
+	return mcpCmd
+}
+
+// NewMCPServeCommand creates a new MCP serve command (deprecated, use NewMCPCommand instead)
 func NewMCPServeCommand(rootCmd *cobra.Command, config *ServerConfig) *cobra.Command {
 	var transport string
 	var port int

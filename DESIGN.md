@@ -450,7 +450,7 @@ func main() {
     // etc.
 
     // Add MCP commands (these are added directly to root, not under a subcommand)
-    rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{
+    rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{
         Name: "mycli-mcp-server",
         ToolPrefix: "mycli",
     }))
@@ -459,7 +459,9 @@ func main() {
         Model: "gpt-4",
     }))
 
-    // Usage: mycli serve --transport stdio
+    // Usage: mycli mcp start          (start MCP server over stdin)
+    // Usage: mycli mcp stream         (start MCP server over HTTP)
+    // Usage: mycli mcp tools          (export available MCP tools as JSON)
     // Usage: mycli chat --api-key YOUR_KEY
     // Usage: mycli chat system-message  (to print the system message)
 
@@ -760,7 +762,10 @@ type SystemMessageConfig struct {
     CustomInstructions []string
 }
 
-// Create MCP serve command
+// Create MCP command group (mcp start, mcp stream, mcp tools)
+func NewMCPCommand(rootCmd *cobra.Command, config *ServerConfig) *cobra.Command
+
+// Create MCP serve command (deprecated, use NewMCPCommand instead)
 func NewMCPServeCommand(rootCmd *cobra.Command, config *ServerConfig) *cobra.Command
 
 // Create chat command
@@ -776,13 +781,14 @@ func NewChatClient(server *Server, config *ChatConfig) (*ChatClient, error)
 
 ### 6.2 Command Line Interface
 
-The library provides two Cobra commands:
+The library provides MCP commands and a chat command:
 
-**`serve`**:
-- Flags:
-  - `--transport` (stdio|http, default: stdio)
-  - `--port` (int, default: 8080, only for http)
-- Starts MCP server
+**`mcp`** (command group):
+- `mcp start` - Start MCP server over stdin/stdout
+- `mcp stream` - Start MCP server over HTTP
+  - Flags:
+    - `--port` (int, default: 8080)
+- `mcp tools` - Export available MCP tools as JSON
 
 **`chat`**:
 - Flags:
@@ -826,7 +832,7 @@ func main() {
     rootCmd.AddCommand(deleteCmd)
 
     // Add MCP commands
-    rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{
+    rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{
         Name:       "mycli-mcp-server",
         ToolPrefix: "mycli",
     }))

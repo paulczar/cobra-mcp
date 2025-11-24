@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-01-XX
+
+### Added
+- New `NewMCPCommand` function that creates an `mcp` command group with subcommands:
+  - `mcp start` - Start MCP server over stdin/stdout
+  - `mcp stream` - Start MCP server over HTTP (with `--port` flag)
+  - `mcp tools` - Export available MCP tools as JSON
+- `mcp tools` command for exporting tool definitions as JSON for debugging and integration
+
+### Changed
+- `NewMCPServeCommand` is now deprecated (kept for backward compatibility)
+- Updated all documentation to reflect new command structure
+- Examples updated to use `NewMCPCommand`
+
 ## [1.1.0] - 2025-01-XX
 
 ### Added

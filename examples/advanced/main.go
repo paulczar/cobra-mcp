@@ -123,7 +123,7 @@ func main() {
 		DangerousCommands: []string{"delete"},
 	}
 
-	rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, serverConfig))
+	rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, serverConfig))
 	rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
 		Model: "gpt-5-mini",
 		Debug: false,

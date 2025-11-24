@@ -75,15 +75,18 @@ serverConfig := &cobra_mcp.ServerConfig{
 - You want to explicitly mark certain commands as standalone, even if they have subcommands
 - Rarely needed since auto-detection handles this correctly
 
-## Step 5: Add MCP Serve Command
+## Step 5: Add MCP Command
 
-Add the MCP serve command to your root command:
+Add the MCP command group to your root command:
 
 ```go
-rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, serverConfig))
+rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, serverConfig))
 ```
 
-This adds a `serve` command that starts the MCP server.
+This adds an `mcp` command group with three subcommands:
+- `mcp start` - Start MCP server over stdin/stdout
+- `mcp stream` - Start MCP server over HTTP (with `--port` flag, default: 8080)
+- `mcp tools` - Export available MCP tools as JSON
 
 ## Step 6: Add Chat Command (Optional)
 
@@ -153,18 +156,28 @@ The library captures both, but `cmd.Println()` is preferred for proper output re
 
 ## Step 9: Test the Integration
 
-1. **Test MCP Server:**
+1. **Test MCP Server over stdin:**
    ```bash
-   yourcli serve --transport stdio
+   yourcli mcp start
    ```
 
-2. **Test Chat (if added):**
+2. **Test MCP Server over HTTP:**
+   ```bash
+   yourcli mcp stream --port 8080
+   ```
+
+3. **Export MCP tools as JSON:**
+   ```bash
+   yourcli mcp tools
+   ```
+
+4. **Test Chat (if added):**
    ```bash
    export OPENAI_API_KEY=your_key
    yourcli chat
    ```
 
-3. **View system message:**
+5. **View system message:**
    ```bash
    yourcli chat system-message
    ```
@@ -201,10 +214,11 @@ serverConfig := &cobra_mcp.ServerConfig{
 
 After integration, verify tools are generated correctly:
 
-1. Start the MCP server: `yourcli serve --transport stdio`
-2. Send an `initialize` request
-3. Send a `tools/list` request
-4. Verify your commands appear as hierarchical tools (e.g., `yourcli_list`, `yourcli_create`)
+1. Export available tools: `yourcli mcp tools` (shows all tools as JSON)
+2. Or start the MCP server: `yourcli mcp start`
+3. Send an `initialize` request
+4. Send a `tools/list` request
+5. Verify your commands appear as hierarchical tools (e.g., `yourcli_list`, `yourcli_create`)
 
 ## Common Patterns
 
@@ -213,20 +227,20 @@ After integration, verify tools are generated correctly:
 For most CLIs, you only need to specify `ToolPrefix` (or nothing at all):
 
 ```go
-rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{
+rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{
     ToolPrefix: "mycli",  // Optional - defaults to CLI name
 }))
 ```
 
 Or even simpler (uses all defaults):
 ```go
-rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{}))
+rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{}))
 ```
 
 ### Pattern 2: CLI with Custom Actions
 
 ```go
-rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{
+rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{
     Name:          "mycli-mcp-server",
     ToolPrefix:    "mycli",
     CustomActions: []string{"deploy", "rollback", "scale"},
@@ -237,7 +251,7 @@ rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig
 
 ```go
 // MCP Server
-rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{
+rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{
     Name:       "mycli-mcp-server",
     ToolPrefix: "mycli",
 }))
@@ -254,6 +268,7 @@ rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
    - Check that your commands follow the action/resource pattern (e.g., `create cluster`, `list nodes`)
    - If you specified `CustomActions`, make sure your action is in the whitelist (auto-detection is disabled when `CustomActions` is set)
    - Standalone commands (like `version`, `help`) are auto-detected if they have no subcommands
+   - Use `yourcli mcp tools` to see all available tools as JSON
 2. **MCP server or chat client terminates unexpectedly**:
    - **⚠️ CRITICAL**: Commands using `Run:` with `os.Exit()` will terminate the entire MCP/chat process
    - **Solution**: Use `RunE:` instead of `Run:` and return errors instead of calling `os.Exit()`
@@ -286,7 +301,7 @@ func main() {
     // ... etc
 
     // Add MCP support (minimal configuration - uses defaults for actions)
-    rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{
+    rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{
         ToolPrefix: "mycli",  // Optional - defaults to CLI name
     }))
 

@@ -43,7 +43,7 @@ func main() {
 	rootCmd.AddCommand(listCmd)
 
 	// Add MCP commands (these are added directly to root, not under a subcommand)
-	rootCmd.AddCommand(cobra_mcp.NewMCPServeCommand(rootCmd, &cobra_mcp.ServerConfig{
+	rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, &cobra_mcp.ServerConfig{
 		Name:       "mycli-mcp-server",
 		ToolPrefix: "mycli",
 	}))
@@ -60,16 +60,22 @@ func main() {
 
 ### MCP Server
 
-Start the MCP server:
+Start the MCP server over stdin:
 
 ```bash
-mycli serve --transport stdio
+mycli mcp start
 ```
 
-Or over HTTP:
+Start the MCP server over HTTP:
 
 ```bash
-mycli serve --transport http --port 8080
+mycli mcp stream --port 8080
+```
+
+Export available MCP tools as JSON:
+
+```bash
+mycli mcp tools
 ```
 
 ### Chat Client
@@ -143,9 +149,22 @@ config := &cobra_mcp.ChatConfig{
 
 ## API Reference
 
-### NewMCPServeCommand
+### NewMCPCommand
 
-Creates a new Cobra command for serving MCP over stdio or HTTP.
+Creates a new Cobra command group with MCP subcommands (`mcp start`, `mcp stream`, `mcp tools`).
+
+```go
+func NewMCPCommand(rootCmd *cobra.Command, config *ServerConfig) *cobra.Command
+```
+
+The command provides three subcommands:
+- `mcp start` - Start MCP server over stdin/stdout
+- `mcp stream` - Start MCP server over HTTP (with `--port` flag, default: 8080)
+- `mcp tools` - Export available MCP tools as JSON
+
+### NewMCPServeCommand (Deprecated)
+
+Creates a new Cobra command for serving MCP over stdio or HTTP. **Deprecated**: Use `NewMCPCommand` instead.
 
 ```go
 func NewMCPServeCommand(rootCmd *cobra.Command, config *ServerConfig) *cobra.Command
