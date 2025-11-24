@@ -29,7 +29,7 @@ type ToolDefinition struct {
 // NewToolRegistry creates a new ToolRegistry
 func NewToolRegistry(rootCmd *cobra.Command, config *ServerConfig) *ToolRegistry {
 	config = normalizeServerConfig(rootCmd, config)
-	executor := NewCommandExecutor(rootCmd)
+	executor := NewCommandExecutorWithMode(rootCmd, config.ExecutionMode)
 	commands := executor.GetAllCommands()
 
 	tr := &ToolRegistry{

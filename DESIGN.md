@@ -77,24 +77,32 @@ This document describes the design for a reusable, pluggable library that enable
 
 ### 3.1 CommandExecutor
 
-**Purpose**: Discover and execute Cobra commands directly in-process by calling their Run functions.
+**Purpose**: Discover and execute Cobra commands either in-process or in sub-process, depending on execution mode configuration.
 
-**⚠️ Important Limitation**: Commands execute **in-process**. If a command calls `os.Exit()`, it will **terminate the entire MCP server or chat client process**. Commands should use `RunE:` (return errors) instead of `Run:` with `os.Exit()` calls.
+**Execution Modes**:
+- **`"in-process"`** (default): Execute commands directly in-process for optimal performance. Fast but vulnerable to `os.Exit()` calls.
+- **`"sub-process"`**: Execute all commands in a sub-process. Safer (can't kill parent process) but slower due to process spawn overhead.
+- **`"auto"`**: Auto-detect commands using `Run:` (no `RunE:`) and execute them in sub-process, while using in-process for commands with `RunE:`. Best of both worlds.
+
+**⚠️ Important Limitation**: In default `"in-process"` mode, if a command calls `os.Exit()`, it will **terminate the entire MCP server or chat client process**. Use `"auto"` or `"sub-process"` execution mode, or migrate commands to use `RunE:` (return errors) instead of `Run:` with `os.Exit()` calls.
 
 **Key Responsibilities**:
 - Traverse Cobra command tree to discover all commands
 - Extract flag information (name, type, description, required)
-- Execute commands directly in-process by calling `cmd.ExecuteContext()`
-- Capture command output by redirecting stdout/stderr to buffers
+- Execute commands either in-process or in sub-process based on execution mode
+- Route execution based on command type (`Run:` vs `RunE:`) in auto mode
+- Capture command output by redirecting stdout/stderr to buffers (in-process) or via pipes (sub-process)
 - Automatically add JSON output flags when supported
 
 **API**:
 ```go
 type CommandExecutor struct {
-    rootCmd *cobra.Command
+    rootCmd       *cobra.Command
+    executionMode string // "in-process", "sub-process", or "auto"
 }
 
-func NewCommandExecutor(rootCmd *cobra.Command) *CommandExecutor
+func NewCommandExecutor(rootCmd *cobra.Command) *CommandExecutor // Defaults to "in-process"
+func NewCommandExecutorWithMode(rootCmd *cobra.Command, executionMode string) *CommandExecutor
 
 type CommandInfo struct {
     Path        []string  // Command path: ["create", "cluster"]
@@ -122,6 +130,8 @@ type ExecuteResult struct {
 func (e *CommandExecutor) GetAllCommands() []CommandInfo
 func (e *CommandExecutor) Execute(commandPath []string, flags map[string]interface{}) (*ExecuteResult, error)
 func (e *CommandExecutor) FindCommand(path []string) (*cobra.Command, []string, error)
+func (e *CommandExecutor) ExecuteSubProcess(commandPath []string, flags map[string]interface{}) (*ExecuteResult, error)
+func (e *CommandExecutor) shouldUseSubProcess(cmd *cobra.Command) bool // Internal helper
 ```
 
 **Implementation Details**:
@@ -145,11 +155,30 @@ func (e *CommandExecutor) FindCommand(path []string) (*cobra.Command, []string, 
 - Both are merged into a single output buffer before returning results
 - **Best Practice**: Commands should use `cmd.Println()` as it respects output redirection and follows Cobra conventions, but direct writes are supported for compatibility
 
+**Sub-Process Execution**:
+- When execution mode is `"sub-process"` or `"auto"` (and command uses `Run:`), commands are executed in a separate process
+- Uses `os.Executable()` to get the current running binary path automatically
+- Builds command line arguments from command path, flags, and positional args
+- Captures stdout/stderr via pipes using `exec.CommandContext()`
+- Captures exit code from `cmd.Wait()`
+- Handles context cancellation/timeout
+- Preserves same `ExecuteResult` interface for compatibility
+- **Benefits**: Commands calling `os.Exit()` cannot kill the parent MCP/chat process
+- **Trade-offs**: Process spawn overhead, but safer for commands that may call `os.Exit()`
+
 **⚠️ Critical: Avoid `os.Exit()` in Commands**:
-- Commands execute **in-process** - `os.Exit()` terminates the entire MCP/chat process
-- Use `RunE:` instead of `Run:` to return errors instead of calling `os.Exit()`
-- The executor cannot capture output or continue the session after `os.Exit()` is called
-- This is a fundamental limitation of in-process execution - `os.Exit()` cannot be intercepted
+- In default `"in-process"` mode, commands execute **in-process** - `os.Exit()` terminates the entire MCP/chat process
+- Use `"auto"` execution mode to automatically execute commands with `Run:` in sub-process (recommended)
+- Use `"sub-process"` execution mode to execute all commands in sub-process (safest)
+- Use `RunE:` instead of `Run:` to return errors instead of calling `os.Exit()` (best practice)
+- The executor cannot capture output or continue the session after `os.Exit()` is called in in-process mode
+- Sub-process execution isolates `os.Exit()` calls and prevents parent process termination
+
+**Warning System**:
+- The library automatically detects commands using `Run:` (no `RunE:`) and warns about potential `os.Exit()` issues
+- **Warnings are only shown** when `ExecutionMode` is `"in-process"` (default)
+- When `ExecutionMode` is `"auto"` or `"sub-process"`, warnings are suppressed because these modes protect against `os.Exit()`
+- The warning message suggests using `ExecutionMode: "auto"` or `"sub-process"` as an alternative to migrating commands
 
 ### 3.2 ToolRegistry
 

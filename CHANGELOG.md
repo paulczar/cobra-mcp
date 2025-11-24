@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-01-XX
+
+### Added
+- Sub-process execution mode to handle CLIs that use `Run:` with `os.Exit()`
+- `ExecutionMode` configuration option in `ServerConfig` with three modes:
+  - `"in-process"` (default): Execute all commands in-process for optimal performance
+  - `"sub-process"`: Execute all commands in sub-process to protect against `os.Exit()`
+  - `"auto"`: Auto-detect commands using `Run:` and execute them in sub-process, others in-process
+- `NewCommandExecutorWithMode()` function to create executor with specific execution mode
+- `ExecuteSubProcess()` method for sub-process command execution
+- Automatic executable path detection using `os.Executable()` (no configuration needed)
+- Conditional warning system that only warns in `"in-process"` mode
+
+### Changed
+- Warnings about commands using `Run:` are now conditional - only shown in `"in-process"` mode
+- Warning message updated to suggest using `ExecutionMode: "auto"` or `"sub-process"` as alternatives
+- `CommandExecutor` now supports execution mode configuration
+- `Execute()` method now routes to sub-process or in-process execution based on mode
+
+### Fixed
+- Commands using `Run:` with `os.Exit()` no longer terminate MCP/chat process when using `"auto"` or `"sub-process"` modes
+- Parent process survives `os.Exit()` calls when commands execute in sub-process
+
 ## [1.2.0] - 2025-01-XX
 
 ### Added

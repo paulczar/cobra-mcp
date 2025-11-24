@@ -60,8 +60,35 @@ serverConfig := &cobra_mcp.ServerConfig{
 serverConfig := &cobra_mcp.ServerConfig{
     ToolPrefix: "yourcli",  // Only specify if you want a different prefix
     // CustomActions and StandaloneCmds are auto-detected - no need to specify!
+    // ExecutionMode defaults to "in-process" - see below for options
 }
 ```
+
+**Execution Mode Configuration**:
+
+The library supports three execution modes to handle commands that may call `os.Exit()`:
+
+```go
+serverConfig := &cobra_mcp.ServerConfig{
+    ToolPrefix:    "yourcli",
+    ExecutionMode: "auto", // Options: "in-process", "sub-process", or "auto"
+}
+```
+
+- **`"in-process"`** (default): Execute all commands directly in-process for optimal performance. Fast but vulnerable to `os.Exit()` calls that terminate the MCP/chat process.
+- **`"sub-process"`**: Execute all commands in a sub-process. Safer (can't kill parent process) but slower due to process spawn overhead.
+- **`"auto"`** (recommended): Auto-detect commands using `Run:` (no `RunE:`) and execute them in sub-process, while using in-process for commands with `RunE:`. Best of both worlds - fast for safe commands, safe for risky ones.
+
+**Recommended**: Use `"auto"` mode if your CLI has commands that use `Run:` with `os.Exit()`:
+
+```go
+serverConfig := &cobra_mcp.ServerConfig{
+    ToolPrefix:    "yourcli",
+    ExecutionMode: "auto", // Automatically protect against os.Exit()
+}
+```
+
+**Note**: The executable path for sub-process execution is automatically detected using `os.Executable()` (current running binary). No additional configuration needed.
 
 **Auto-detection behavior:**
 - **Actions**: Any first-level command is automatically detected as an action (e.g., `create`, `list`, `deploy`, `status` - all work automatically)
@@ -101,11 +128,35 @@ chatConfig := &cobra_mcp.ChatConfig{
 rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, chatConfig))
 ```
 
-## Step 7: Use `RunE:` Instead of `Run:` with `os.Exit()`
+## Step 7: Handle Commands with `os.Exit()`
 
-**⚠️ CRITICAL**: Commands executed through MCP/chat run **in-process**. If your commands call `os.Exit()`, it will **terminate the entire MCP server or chat client process**.
+**⚠️ CRITICAL**: In default `"in-process"` mode, commands executed through MCP/chat run **in-process**. If your commands call `os.Exit()`, it will **terminate the entire MCP server or chat client process**.
 
-**Always use `RunE:` to return errors instead of calling `os.Exit()`:**
+**Note**: If you're using `ExecutionMode: "auto"` or `"sub-process"`, you don't need to worry about this - those modes automatically protect against `os.Exit()` calls. The library will also suppress warnings about `Run:` commands when using these modes.
+
+**Option 1: Use `ExecutionMode: "auto"` (Recommended)**
+
+The easiest solution is to use auto mode, which automatically executes commands with `Run:` in sub-process:
+
+```go
+serverConfig := &cobra_mcp.ServerConfig{
+    ExecutionMode: "auto", // Automatically protects against os.Exit()
+}
+```
+
+**Option 2: Use `ExecutionMode: "sub-process"`**
+
+Execute all commands in sub-process for maximum safety:
+
+```go
+serverConfig := &cobra_mcp.ServerConfig{
+    ExecutionMode: "sub-process", // All commands in sub-process
+}
+```
+
+**Option 3: Migrate to `RunE:` (Best Practice)**
+
+Always use `RunE:` to return errors instead of calling `os.Exit()`:
 
 ```go
 // ❌ BAD - os.Exit() terminates the MCP/chat process
@@ -270,8 +321,21 @@ rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
    - Standalone commands (like `version`, `help`) are auto-detected if they have no subcommands
    - Use `yourcli mcp tools` to see all available tools as JSON
 2. **MCP server or chat client terminates unexpectedly**:
-   - **⚠️ CRITICAL**: Commands using `Run:` with `os.Exit()` will terminate the entire MCP/chat process
-   - **Solution**: Use `RunE:` instead of `Run:` and return errors instead of calling `os.Exit()`
+   - **⚠️ CRITICAL**: Commands using `Run:` with `os.Exit()` will terminate the entire MCP/chat process in default `"in-process"` mode
+   - **Note**: If you see warnings about commands using `Run:`, it means you're in `"in-process"` mode. The warnings are automatically suppressed when using `"auto"` or `"sub-process"` modes.
+   - **Solution 1** (Recommended): Use `"auto"` execution mode to automatically execute commands with `Run:` in sub-process:
+     ```go
+     serverConfig := &cobra_mcp.ServerConfig{
+         ExecutionMode: "auto", // Auto-protect against os.Exit(), no warnings shown
+     }
+     ```
+   - **Solution 2**: Use `"sub-process"` execution mode to execute all commands in sub-process:
+     ```go
+     serverConfig := &cobra_mcp.ServerConfig{
+         ExecutionMode: "sub-process", // All commands in sub-process, no warnings shown
+     }
+     ```
+   - **Solution 3**: Migrate commands to use `RunE:` instead of `Run:` and return errors instead of calling `os.Exit()`
    - See Step 7 above for examples
 3. **Output not captured**: Ensure commands use `cmd.Println()` or `fmt.Println()` (both are supported)
 4. **MCP server hangs**: Verify commands don't write directly to `os.Stderr` (use `cmd.PrintErr()` instead)

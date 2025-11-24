@@ -111,8 +111,13 @@ func NewChatCommand(rootCmd *cobra.Command, config *ChatConfig, serverConfig *Se
 					ToolPrefix: rootCmd.Name(),
 				}
 			}
-			// Warn about commands using Run: with chat context (NewServer will skip duplicate warning)
-			warnAboutCommandsUsingRun(rootCmd, "chat client")
+			// Warn about commands using Run: with chat context (only in in-process mode)
+			// NewServer will also check, but we check here first to get the right context message
+			executionMode := "in-process" // Default
+			if serverConfig != nil {
+				executionMode = serverConfig.ExecutionMode
+			}
+			warnAboutCommandsUsingRun(rootCmd, "chat client", executionMode)
 			server := NewServer(rootCmd, serverConfig)
 
 			// Create chat config

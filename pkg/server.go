@@ -24,16 +24,17 @@ type Server struct {
 func NewServer(rootCmd *cobra.Command, config *ServerConfig) *Server {
 	config = normalizeServerConfig(rootCmd, config)
 
-	// Check for commands using Run: instead of RunE: and warn
+	// Check for commands using Run: instead of RunE: and warn (only in in-process mode)
 	// Note: This warning may be suppressed if warnAboutCommandsUsingRun was already called
 	// (e.g., from chat command). We use a simple approach - warn once per process.
-	warnAboutCommandsUsingRun(rootCmd, "MCP server")
+	// Only warn if execution mode is "in-process" (default) - auto and sub-process modes protect against os.Exit()
+	warnAboutCommandsUsingRun(rootCmd, "MCP server", config.ExecutionMode)
 
 	// Create registries
 	toolRegistry := NewToolRegistry(rootCmd, config)
 	var resourceRegistry *ResourceRegistry
 	if config.EnableResources {
-		executor := NewCommandExecutor(rootCmd)
+		executor := NewCommandExecutorWithMode(rootCmd, config.ExecutionMode)
 		resourceRegistry = NewResourceRegistry(executor, config.ToolPrefix)
 	}
 
@@ -233,9 +234,20 @@ func ServeHTTP(rootCmd *cobra.Command, port int, config *ServerConfig) error {
 // warnAboutCommandsUsingRun checks for commands using Run: instead of RunE: and prints warnings
 // Commands using Run: may call os.Exit() which will terminate the MCP/chat process
 // Uses a simple check to avoid duplicate warnings (warns once per process)
+// Only warns when execution mode is "in-process" (default) - auto and sub-process modes protect against os.Exit()
 var warnAboutCommandsUsingRunCalled bool
 
-func warnAboutCommandsUsingRun(rootCmd *cobra.Command, context string) {
+func warnAboutCommandsUsingRun(rootCmd *cobra.Command, context string, executionMode string) {
+	// Only warn if execution mode is "in-process" (default) or empty (defaults to in-process)
+	// Auto and sub-process modes automatically protect against os.Exit() calls
+	if executionMode == "" {
+		executionMode = "in-process" // Default
+	}
+	if executionMode != "in-process" {
+		// No warning needed - execution mode protects against os.Exit()
+		return
+	}
+
 	// Avoid duplicate warnings if called multiple times (e.g., from chat which creates a server)
 	if warnAboutCommandsUsingRunCalled {
 		return
@@ -249,7 +261,8 @@ func warnAboutCommandsUsingRun(rootCmd *cobra.Command, context string) {
 		// Print to stderr to avoid interfering with MCP protocol (which uses stdout)
 		fmt.Fprintf(os.Stderr, "\n⚠️  WARNING: %d command(s) use Run: instead of RunE:\n", len(warnings))
 		fmt.Fprintf(os.Stderr, "   Commands using Run: may call os.Exit() which will terminate the %s process.\n", context)
-		fmt.Fprintf(os.Stderr, "   Consider migrating these commands to use RunE: and return errors instead.\n\n")
+		fmt.Fprintf(os.Stderr, "   Consider migrating these commands to use RunE: and return errors instead.\n")
+		fmt.Fprintf(os.Stderr, "   Alternatively, use ExecutionMode: \"auto\" or \"sub-process\" to protect against os.Exit().\n\n")
 		fmt.Fprintf(os.Stderr, "   Affected commands:\n")
 		for _, warning := range warnings {
 			fmt.Fprintf(os.Stderr, "     - %s\n", warning.CommandName)

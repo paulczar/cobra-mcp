@@ -12,7 +12,8 @@ A pluggable library that enables any Cobra-based CLI application to expose its c
 - **Debug Mode**: Chat client includes debug mode to show tool calls and parameters
 - **Pluggable Architecture**: Easy integration into any existing Cobra CLI with minimal code changes
 - **Dual Modes**: Support both MCP server (for MCP clients) and chat client (for direct AI interaction)
-- **In-Process Execution**: Execute Cobra commands directly in-process for optimal performance
+- **Flexible Execution**: Support both in-process execution (fast) and sub-process execution (safe from os.Exit())
+- **Auto-Detection**: Automatically detect commands using `Run:` and execute them in sub-process to prevent termination
 
 ## Installation
 
@@ -131,6 +132,8 @@ config := &cobra_mcp.ServerConfig{
 	StandaloneCmds: []string{"version", "help"},
 	// Dangerous commands that require explicit confirmation
 	DangerousCommands: []string{"delete", "destroy"},
+	// Execution mode: "in-process" (default), "sub-process", or "auto"
+	ExecutionMode: "auto", // Auto-detect: use sub-process for commands with Run:, in-process for RunE:
 }
 ```
 
@@ -204,9 +207,33 @@ func NewChatClient(server *Server, config *ChatConfig) (*ChatClient, error)
 
 ## Best Practices
 
+### Execution Modes
+
+The library supports three execution modes to handle commands that may call `os.Exit()`:
+
+- **`"in-process"`** (default): Execute all commands directly in-process for optimal performance. Fast but vulnerable to `os.Exit()` calls.
+- **`"sub-process"`**: Execute all commands in a sub-process. Safer (can't kill parent process) but slower due to process spawn overhead.
+- **`"auto"`**: Auto-detect commands using `Run:` (no `RunE:`) and execute them in sub-process, while using in-process for commands with `RunE:`. Best of both worlds.
+
+**Recommended**: Use `"auto"` mode to automatically protect against `os.Exit()` while maintaining performance for safe commands:
+
+```go
+config := &cobra_mcp.ServerConfig{
+	ExecutionMode: "auto", // Auto-detect and protect against os.Exit()
+}
+```
+
 ### Error Handling - Avoid `os.Exit()`
 
-**⚠️ CRITICAL**: Commands executed through MCP/chat run **in-process**. If your commands call `os.Exit()`, it will **terminate the entire MCP server or chat client process**, preventing further interaction.
+**⚠️ IMPORTANT**: By default, commands executed through MCP/chat run **in-process**. If your commands call `os.Exit()`, it will **terminate the entire MCP server or chat client process**, preventing further interaction.
+
+**Note**: When using `ExecutionMode: "auto"` or `ExecutionMode: "sub-process"`, the library will **not** show warnings about commands using `Run:` because these modes automatically protect against `os.Exit()` calls. Warnings only appear in default `"in-process"` mode.
+
+**Solutions:**
+
+1. **Use `"auto"` execution mode** (recommended) to automatically execute commands with `Run:` in sub-process - no warnings, no code changes needed
+2. **Use `"sub-process"` execution mode** to execute all commands in sub-process - safest option
+3. **Use `RunE:` instead of `Run:`** to return errors instead of calling `os.Exit()` - best practice for new code
 
 **Use `RunE:` instead of `Run:`** to return errors instead of calling `os.Exit()`:
 
@@ -235,10 +262,18 @@ var listCmd = &cobra.Command{
 ```
 
 **Why this matters:**
-- Commands execute in the same process as the MCP server/chat client
+- Commands execute in the same process as the MCP server/chat client (in default `"in-process"` mode)
 - `os.Exit()` immediately terminates the entire process (no cleanup, no return)
-- The executor cannot capture output or continue the session after `os.Exit()`
+- The executor cannot capture output or continue the session after `os.Exit()` in in-process mode
 - Using `RunE:` allows proper error handling and the session continues
+- Using `"auto"` or `"sub-process"` execution mode isolates commands that call `os.Exit()` and prevents parent process termination
+
+**Warning Behavior:**
+- Warnings about commands using `Run:` are **only shown** when `ExecutionMode` is `"in-process"` (default)
+- When using `ExecutionMode: "auto"` or `"sub-process"`, no warnings are shown because these modes protect against `os.Exit()`
+- The warning message suggests using `ExecutionMode: "auto"` or `"sub-process"` as an alternative to migrating commands
+
+**Note**: The executable path for sub-process execution is automatically detected using `os.Executable()` (current running binary). No configuration needed.
 
 ### Command Output
 

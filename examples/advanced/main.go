@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	cobra_mcp "github.com/paulczar/cobra-mcp/pkg"
 	"github.com/spf13/cobra"
@@ -105,11 +106,26 @@ func main() {
 		},
 	}
 
+	// Add status command that uses Run: with os.Exit() to demonstrate auto mode
+	// This command will be automatically executed in sub-process when ExecutionMode is "auto"
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Check CLI status and exit",
+		Long:  "This command uses Run: with os.Exit() to demonstrate sub-process execution mode. In 'auto' mode, this command will be executed in a sub-process to prevent terminating the MCP/chat process.",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Println(`{"status": "healthy", "version": "2.0.0"}`)
+			// This os.Exit() would kill the MCP/chat process in in-process mode,
+			// but in auto mode, this command runs in sub-process so it's safe
+			os.Exit(0)
+		},
+	}
+
 	rootCmd.AddCommand(createCmd)
 	rootCmd.AddCommand(deleteCmd)
 	rootCmd.AddCommand(describeCmd)
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(statusCmd)
 
 	// Share the same ServerConfig so dangerous commands work in chat
 	serverConfig := &cobra_mcp.ServerConfig{
@@ -121,6 +137,9 @@ func main() {
 		EnableResources: true,
 		// Dangerous commands that require explicit confirmation
 		DangerousCommands: []string{"delete"},
+		// Use "auto" execution mode to automatically execute commands with Run: in sub-process
+		// This protects against os.Exit() calls while maintaining performance for RunE: commands
+		ExecutionMode: "auto",
 	}
 
 	rootCmd.AddCommand(cobra_mcp.NewMCPCommand(rootCmd, serverConfig))

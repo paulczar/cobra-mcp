@@ -7,15 +7,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
-// CommandExecutor discovers and executes Cobra commands directly in-process
+// CommandExecutor discovers and executes Cobra commands directly in-process or in sub-process
 type CommandExecutor struct {
-	rootCmd *cobra.Command
+	rootCmd       *cobra.Command
+	executionMode string // "in-process", "sub-process", or "auto"
 }
 
 // CommandInfo represents information about a discovered command
@@ -44,10 +46,23 @@ type ExecuteResult struct {
 	Error    error
 }
 
-// NewCommandExecutor creates a new CommandExecutor
+// NewCommandExecutor creates a new CommandExecutor with default in-process execution mode
 func NewCommandExecutor(rootCmd *cobra.Command) *CommandExecutor {
+	return NewCommandExecutorWithMode(rootCmd, "in-process")
+}
+
+// NewCommandExecutorWithMode creates a new CommandExecutor with the specified execution mode
+func NewCommandExecutorWithMode(rootCmd *cobra.Command, executionMode string) *CommandExecutor {
+	// Validate and default execution mode
+	if executionMode == "" {
+		executionMode = "in-process"
+	}
+	if executionMode != "in-process" && executionMode != "sub-process" && executionMode != "auto" {
+		executionMode = "in-process"
+	}
 	return &CommandExecutor{
-		rootCmd: rootCmd,
+		rootCmd:       rootCmd,
+		executionMode: executionMode,
 	}
 }
 
@@ -224,8 +239,184 @@ func (e *CommandExecutor) traverseForRunWarnings(cmd *cobra.Command, path []stri
 	}
 }
 
-// Execute executes a command with the given path and flags directly in-process
+// shouldUseSubProcess determines if a command should be executed in a sub-process
+func (e *CommandExecutor) shouldUseSubProcess(cmd *cobra.Command) bool {
+	switch e.executionMode {
+	case "sub-process":
+		return true
+	case "auto":
+		// Auto-detect: use sub-process for commands with Run: (no RunE:)
+		return cmd.Run != nil && cmd.RunE == nil
+	case "in-process":
+		fallthrough
+	default:
+		return false
+	}
+}
+
+// ExecuteSubProcess executes a command in a sub-process
+func (e *CommandExecutor) ExecuteSubProcess(commandPath []string, flags map[string]interface{}) (*ExecuteResult, error) {
+	// Get the executable path (current running binary)
+	executablePath, err := os.Executable()
+	if err != nil {
+		return &ExecuteResult{
+			Stdout:   "",
+			Stderr:   fmt.Sprintf("Error getting executable path: %v", err),
+			ExitCode: 1,
+			Error:    err,
+		}, nil
+	}
+
+	// Find the command to get positional args and validate it exists
+	cmd, args, err := e.FindCommand(commandPath)
+	if err != nil {
+		return &ExecuteResult{
+			Stdout:   "",
+			Stderr:   fmt.Sprintf("Command not found: %v", err),
+			ExitCode: 1,
+			Error:    err,
+		}, nil
+	}
+
+	// Build command line arguments
+	execArgs := make([]string, 0)
+	execArgs = append(execArgs, commandPath...)
+
+	// Add flags
+	for name, value := range flags {
+		if value == nil {
+			continue
+		}
+
+		// Check if flag exists on the command (or its parents)
+		flag := cmd.Flags().Lookup(name)
+		if flag == nil {
+			flag = cmd.PersistentFlags().Lookup(name)
+		}
+		if flag == nil {
+			// Try shorthand
+			if len(name) == 1 {
+				flag = cmd.Flags().ShorthandLookup(name)
+				if flag == nil {
+					flag = cmd.PersistentFlags().ShorthandLookup(name)
+				}
+			}
+		}
+
+		if flag != nil {
+			// Convert value to string for flag arg
+			var flagValue string
+			switch v := value.(type) {
+			case string:
+				flagValue = v
+			case bool:
+				if v {
+					// Boolean flags: --flag (no value) for true
+					if flag.Shorthand != "" && len(flag.Shorthand) == 1 {
+						execArgs = append(execArgs, fmt.Sprintf("-%s", flag.Shorthand))
+					} else {
+						execArgs = append(execArgs, fmt.Sprintf("--%s", name))
+					}
+					continue // Boolean flags don't need a value
+				} else {
+					continue // Skip false boolean flags
+				}
+			case int, int8, int16, int32, int64:
+				flagValue = fmt.Sprintf("%d", v)
+			case uint, uint8, uint16, uint32, uint64:
+				flagValue = fmt.Sprintf("%d", v)
+			case float32, float64:
+				flagValue = fmt.Sprintf("%g", v)
+			default:
+				// Try JSON encoding for complex types
+				jsonBytes, err := json.Marshal(v)
+				if err != nil {
+					flagValue = fmt.Sprintf("%v", v)
+				} else {
+					flagValue = string(jsonBytes)
+				}
+			}
+
+			// Add flag to args: --name value or -n value
+			if flag.Shorthand != "" && len(flag.Shorthand) == 1 {
+				execArgs = append(execArgs, fmt.Sprintf("-%s", flag.Shorthand), flagValue)
+			} else {
+				execArgs = append(execArgs, fmt.Sprintf("--%s", name), flagValue)
+			}
+		}
+	}
+
+	// Check if command supports output flag and add JSON output (for consistency with in-process)
+	hasOutputFlag := e.hasOutputFlag(cmd)
+	if hasOutputFlag {
+		// Check if output flag is already set in flags map
+		if _, alreadySet := flags["output"]; !alreadySet {
+			if _, alreadySet := flags["o"]; !alreadySet {
+				// Add --output json flag
+				execArgs = append(execArgs, "--output", "json")
+			}
+		}
+	}
+
+	// Add positional args
+	if len(args) > 0 {
+		execArgs = append(execArgs, args...)
+	}
+
+	// Create command context
+	ctx := context.Background()
+	execCmd := exec.CommandContext(ctx, executablePath, execArgs...)
+
+	// Capture stdout and stderr
+	var stdoutBuf, stderrBuf bytes.Buffer
+	execCmd.Stdout = &stdoutBuf
+	execCmd.Stderr = &stderrBuf
+
+	// Execute the command
+	err = execCmd.Run()
+
+	// Get exit code
+	exitCode := 0
+	if err != nil {
+		// Check if it's an ExitError to get the actual exit code
+		if exitError, ok := err.(*exec.ExitError); ok {
+			exitCode = exitError.ExitCode()
+		} else {
+			// Other error (e.g., process spawn failure)
+			exitCode = 1
+		}
+	}
+
+	result := &ExecuteResult{
+		Stdout:   stdoutBuf.String(),
+		Stderr:   stderrBuf.String(),
+		ExitCode: exitCode,
+		Error:    err,
+	}
+
+	return result, nil
+}
+
+// Execute executes a command with the given path and flags
+// It routes to either in-process or sub-process execution based on execution mode
 func (e *CommandExecutor) Execute(commandPath []string, flags map[string]interface{}) (*ExecuteResult, error) {
+	// Find the command to check if we should use sub-process
+	cmd, _, err := e.FindCommand(commandPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if we should use sub-process execution
+	if e.shouldUseSubProcess(cmd) {
+		return e.ExecuteSubProcess(commandPath, flags)
+	}
+
+	// Otherwise, use in-process execution (existing logic)
+	return e.executeInProcess(commandPath, flags)
+}
+
+// executeInProcess executes a command with the given path and flags directly in-process
+func (e *CommandExecutor) executeInProcess(commandPath []string, flags map[string]interface{}) (*ExecuteResult, error) {
 	cmd, args, err := e.FindCommand(commandPath)
 	if err != nil {
 		return nil, err

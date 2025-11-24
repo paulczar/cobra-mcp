@@ -19,6 +19,11 @@ type ServerConfig struct {
 	// DangerousCommands is a list of dangerous commands that require confirmation
 	// Format: "action" or "action resource" (e.g., "delete", "delete cluster", "destroy")
 	DangerousCommands []string
+	// ExecutionMode determines how commands are executed:
+	//   - "in-process" (default): Execute commands directly in-process (fast, but vulnerable to os.Exit())
+	//   - "sub-process": Execute all commands in a sub-process (safer, but slower)
+	//   - "auto": Auto-detect - use sub-process for commands with Run: (no RunE:), in-process for others
+	ExecutionMode string
 }
 
 // ChatConfig holds configuration for the chat client
@@ -96,6 +101,17 @@ func normalizeServerConfig(rootCmd *cobra.Command, config *ServerConfig) *Server
 
 	if config.ToolPrefix == "" {
 		config.ToolPrefix = rootCmd.Name()
+	}
+
+	// Default execution mode to "in-process" for backward compatibility
+	if config.ExecutionMode == "" {
+		config.ExecutionMode = "in-process"
+	}
+
+	// Validate execution mode
+	if config.ExecutionMode != "in-process" && config.ExecutionMode != "sub-process" && config.ExecutionMode != "auto" {
+		// Invalid mode, default to in-process
+		config.ExecutionMode = "in-process"
 	}
 
 	// CustomActions and StandaloneCmds are left as nil/empty for auto-detection
