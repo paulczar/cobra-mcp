@@ -367,8 +367,9 @@ type ChatConfig struct {
     APIURL            string  // Optional custom API URL
     Model             string  // Default: "gpt-4"
     Debug             bool
-    SystemMessage     string  // Optional custom system message
-    SystemMessageFile string  // Optional file path for system message
+    SystemMessage     string  // Optional custom system message (overrides generated)
+    SystemMessageFile string  // Optional file path for system message (overrides generated)
+    SystemMessageAppend string // Optional content to append to generated system message
 }
 
 func NewChatClient(server *Server, config *ChatConfig) (*ChatClient, error)
@@ -775,8 +776,9 @@ type ChatConfig struct {
     APIURL            string
     Model             string
     Debug             bool  // Enable debug output showing tool calls and parameters
-    SystemMessage     string
-    SystemMessageFile string
+    SystemMessage     string  // Optional custom system message (overrides generated)
+    SystemMessageFile string  // Optional file path for system message (overrides generated)
+    SystemMessageAppend string // Optional content to append to generated system message
 }
 
 // System message configuration
@@ -876,6 +878,8 @@ func main() {
 
 ### 7.2 Custom System Message
 
+**Option 1: Override entire system message**
+
 ```go
 config := &cobra_mcp.SystemMessageConfig{
     CLIName:        "mycli",
@@ -893,6 +897,19 @@ config := &cobra_mcp.SystemMessageConfig{
 
 systemMessage := cobra_mcp.GenerateSystemMessage(config)
 ```
+
+**Option 2: Append to generated system message (recommended)**
+
+```go
+rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
+    Model: "gpt-4",
+    SystemMessageAppend: `OUTPUT LIMITATION:
+When listing resources, always use --parameter size=10 to limit results.
+Use --columns to specify only essential columns.`,
+}))
+```
+
+This approach preserves the auto-generated system message and adds your custom instructions at the end.
 
 ### 7.3 Custom Actions
 

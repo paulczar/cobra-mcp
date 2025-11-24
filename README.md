@@ -145,10 +145,26 @@ config := &cobra_mcp.ChatConfig{
 	APIURL:            "", // Optional custom API URL
 	Model:             "gpt-4",
 	Debug:             false, // Enable debug output showing tool calls and parameters
-	SystemMessage:     "", // Optional custom system message
-	SystemMessageFile: "", // Optional file path for system message
+	SystemMessage:     "", // Optional custom system message (overrides generated message)
+	SystemMessageFile: "", // Optional file path for system message (overrides generated message)
+	SystemMessageAppend: "", // Optional content to append to generated system message
 }
 ```
+
+**Example: Appending custom instructions to system message**
+
+```go
+rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
+	Model: "gpt-4",
+	SystemMessageAppend: `OUTPUT LIMITATION:
+When listing clusters or other resources, always use the following flags to limit output:
+- Use --parameter size=10 to limit results to 10 items
+- Use --columns to specify only essential columns (e.g., --columns "id,name,state")
+- Combine both flags to minimize token usage`,
+}))
+```
+
+This appends your custom instructions to the auto-generated system message, allowing you to add CLI-specific guidance without overriding the entire message.
 
 ## API Reference
 

@@ -73,6 +73,11 @@ func NewChatClient(server *Server, config *ChatConfig) (*ChatClient, error) {
 		systemMessage = GenerateSystemMessageFromRegistry(server.toolRegistry, server.rootCmd, systemMessageConfig)
 	}
 
+	// Append additional content if provided
+	if config.SystemMessageAppend != "" {
+		systemMessage = systemMessage + "\n\n" + config.SystemMessageAppend
+	}
+
 	// Initialize messages with system message
 	messages := []openai.ChatCompletionMessageParamUnion{
 		openai.SystemMessage(systemMessage),

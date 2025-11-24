@@ -226,6 +226,11 @@ func newSystemMessageCommand(rootCmd *cobra.Command, config *ChatConfig, serverC
 				systemMessage = GenerateSystemMessageFromRegistry(server.toolRegistry, rootCmd, systemMessageConfig)
 			}
 
+			// Append additional content if provided (same logic as NewChatClient)
+			if chatConfig.SystemMessageAppend != "" {
+				systemMessage = systemMessage + "\n\n" + chatConfig.SystemMessageAppend
+			}
+
 			// Print the system message
 			cmd.Println(systemMessage)
 			return nil

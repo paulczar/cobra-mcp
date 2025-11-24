@@ -237,7 +237,9 @@ The library captures both, but `cmd.Println()` is preferred for proper output re
 
 ### Custom System Message
 
-If you want to customize the AI's instructions:
+If you want to customize the AI's instructions, you have two options:
+
+**Option 1: Override the entire system message**
 
 ```go
 chatConfig := &cobra_mcp.ChatConfig{
@@ -245,6 +247,23 @@ chatConfig := &cobra_mcp.ChatConfig{
     SystemMessageFile: "path/to/custom-system-message.txt",
 }
 ```
+
+**Option 2: Append to the generated system message (recommended)**
+
+This preserves the auto-generated system message and adds your custom instructions:
+
+```go
+chatConfig := &cobra_mcp.ChatConfig{
+    Model: "gpt-4",
+    SystemMessageAppend: `OUTPUT LIMITATION:
+When listing clusters or other resources, always use the following flags to limit output:
+- Use --parameter size=10 to limit results to 10 items
+- Use --columns to specify only essential columns (e.g., --columns "id,name,state")
+- Combine both flags to minimize token usage`,
+}
+```
+
+This is useful when you want to add CLI-specific guidance (like output limitations) without losing the comprehensive auto-generated instructions.
 
 ### Custom Actions (Whitelist Mode)
 

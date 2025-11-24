@@ -66,8 +66,16 @@ func main() {
 		ToolPrefix: "example",
 	}))
 
+	// Add chat command with system message append example
+	// You can append custom instructions to the generated system message
 	rootCmd.AddCommand(cobra_mcp.NewChatCommand(rootCmd, &cobra_mcp.ChatConfig{
 		Model: "gpt-5-mini",
+		// Example: Append instructions to limit output when listing resources
+		// SystemMessageAppend: `OUTPUT LIMITATION:
+		// When listing clusters or other resources, always use the following flags to limit output:
+		// - Use --parameter size=10 to limit results to 10 items
+		// - Use --columns to specify only essential columns (e.g., --columns "id,name,state")
+		// - Combine both flags to minimize token usage`,
 	}, nil)) // nil means use default ServerConfig
 
 	rootCmd.Execute()

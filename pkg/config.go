@@ -40,6 +40,8 @@ type ChatConfig struct {
 	SystemMessage string
 	// SystemMessageFile is an optional file path for system message
 	SystemMessageFile string
+	// SystemMessageAppend is optional content to append to the generated system message
+	SystemMessageAppend string
 }
 
 // SystemMessageConfig holds configuration for system message generation

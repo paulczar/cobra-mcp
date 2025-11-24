@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2025-01-XX
+
+### Added
+- `SystemMessageAppend` field in `ChatConfig` to append custom content to the generated system message
+- Allows CLI applications to add additional instructions (e.g., output limitation guidelines) without overriding the entire system message
+- Appended content is automatically included when viewing system message via `chat system-message` command
+
 ## [1.3.0] - 2025-01-XX
 
 ### Added
