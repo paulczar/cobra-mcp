@@ -94,6 +94,27 @@ func (e *CommandExecutor) traverseCommands(cmd *cobra.Command, path []string, co
 
 	// Add current command
 	currentPath := append(path, cmd.Name())
+
+	// Skip MCP and chat commands (these are infrastructure commands, not user commands)
+	// Check if the command path starts with "mcp" or "chat"
+	if len(currentPath) > 0 {
+		firstSegment := strings.ToLower(currentPath[0])
+		if firstSegment == "mcp" || firstSegment == "chat" {
+			// Skip this command and all its subcommands
+			return
+		}
+	}
+
+	// Skip Cobra's built-in completion command (not useful for AI agents)
+	// Keep help command as it's useful for AI agents to get command information
+	if len(currentPath) > 0 {
+		firstSegment := strings.ToLower(currentPath[0])
+		if firstSegment == "completion" {
+			// Skip completion command and all its subcommands
+			return
+		}
+	}
+
 	info := CommandInfo{
 		Path:        currentPath,
 		Description: cmd.Short,
